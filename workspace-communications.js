@@ -20,6 +20,12 @@ export async function fetchWorkspaceDirectory(supabase) {
   return data || [];
 }
 
+export async function fetchWorkspaceWorkload(supabase) {
+  const { data, error } = await supabase.rpc("workspace_team_workload");
+  if (error) throw error;
+  return data || [];
+}
+
 export async function fetchConversations(supabase, userId) {
   const { data, error } = await supabase.from("chat_conversations")
     .select("id, participant_one, participant_two, updated_at")

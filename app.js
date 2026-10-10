@@ -5,6 +5,7 @@ import {
   fetchConversationMessages,
   fetchEmployeeReports,
   fetchWorkspaceDirectory,
+  fetchWorkspaceWorkload,
   openConversation,
   sendConversationMessage,
   submitEmployeeReport
@@ -46,8 +47,7 @@ const currentMember = {
   initials: currentSession.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
   color: "avatar-me",
   role: "Employee",
-  skills: currentSession.skills,
-  capacity: 70
+  skills: currentSession.skills
 };
 const savedState = (() => {
   try { return JSON.parse(localStorage.getItem("orbit-workspace") || "{}"); }
@@ -60,6 +60,7 @@ let activities = Array.isArray(savedState.activities) ? savedState.activities : 
 let activeFilter = "all";
 let activeView = "dashboard";
 let workspaceDirectory = [];
+let workloadPercentages = new Map();
 let conversations = [];
 let selectedConversationId = null;
 let expandedWorkloadMember = null;
@@ -137,7 +138,7 @@ function renderWorkload() {
   $("#workloadList").innerHTML = displayedMembers.map((member) => {
     const memberTasks = tasks.filter((task) => task.assignee === member.name);
     const assigned = memberTasks.filter((task) => task.status !== "Completed").length;
-    const load = Math.min(99, Math.max(member.capacity, assigned * 18));
+    const load = workloadPercentages.get(String(member.id)) ?? 0;
     const isExpanded = expandedWorkloadMember === member.id;
     const taskDetails = memberTasks.length
       ? memberTasks.map((task) => `<li><span>${escapeHTML(task.title)}</span><small>${escapeHTML(task.status)}</small></li>`).join("")
@@ -244,6 +245,14 @@ async function refreshEmployeeReports() {
   reports = await fetchEmployeeReports(supabase);
   renderEmployeeReportCards($("#employeeDashboardReportList"), $("#employeeDashboardReportsEmpty"), 5);
   renderEmployeeReportCards($("#employeeReportsList"), $("#employeeReportsEmpty"));
+}
+async function refreshTeamWorkload() {
+  const summaries = await fetchWorkspaceWorkload(supabase);
+  workloadPercentages = new Map(summaries.map((summary) => [
+    String(summary.employee_id),
+    Math.min(100, Math.max(0, Number(summary.completion_percentage) || 0))
+  ]));
+  renderWorkload();
 }
 function showToast(message) {
   const toast = $("#toast");
@@ -443,6 +452,11 @@ $("#reportForm").addEventListener("submit", async (event) => {
       showToast(`Report submitted, but task progress couldn't refresh: ${error.message}`);
     }
     try {
+      await refreshTeamWorkload();
+    } catch (error) {
+      showToast(`Report submitted, but team workload couldn't refresh: ${error.message}`);
+    }
+    try {
       await refreshEmployeeReports();
     } catch (error) {
       showToast(`Report submitted, but its review status couldn't refresh: ${error.message}`);
@@ -495,12 +509,16 @@ try {
     initials: person.full_name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
     color: person.id === currentMember.id ? "avatar-me" : ["avatar-blue", "avatar-green", "avatar-violet", "avatar-amber"][index % 4],
     role: person.role === "admin" ? "Administrator" : "Employee",
-    skills: person.id === currentMember.id ? currentSession.skills : [],
-    capacity: 70
+    skills: person.id === currentMember.id ? currentSession.skills : []
   }));
   renderAll();
 } catch (error) {
   showToast(`Couldn't load workspace members: ${error.message}`);
+}
+try {
+  await refreshTeamWorkload();
+} catch (error) {
+  showToast(`Couldn't load team workload: ${error.message}`);
 }
 try {
   await refreshEmployeeTasks();
@@ -522,6 +540,11 @@ window.setInterval(async () => {
     await refreshEmployeeTasks();
   } catch (error) {
     showToast(`Couldn't refresh assigned tasks: ${error.message}`);
+  }
+  try {
+    await refreshTeamWorkload();
+  } catch (error) {
+    showToast(`Couldn't refresh team workload: ${error.message}`);
   }
   if (activeView === "messages") {
     try { await refreshChats(); }

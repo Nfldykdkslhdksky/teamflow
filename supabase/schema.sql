@@ -456,6 +456,40 @@ $$;
 revoke all on function public.submit_employee_report(bigint, smallint, text, text, text, text, bigint) from public;
 grant execute on function public.submit_employee_report(bigint, smallint, text, text, text, text, bigint) to authenticated;
 
+create or replace function public.workspace_team_workload()
+returns table (employee_id uuid, completion_percentage integer)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  with latest_task_reports as (
+    select distinct on (report.employee_id, report.task_id)
+      report.employee_id,
+      report.completion_percentage
+    from public.employee_reports as report
+    where report.task_id is not null
+      and report.completion_percentage is not null
+    order by report.employee_id, report.task_id, report.created_at desc, report.id desc
+  ),
+  member_progress as (
+    select report.employee_id,
+      round(avg(report.completion_percentage))::integer as completion_percentage
+    from latest_task_reports as report
+    group by report.employee_id
+  )
+  select profile.id,
+    coalesce(progress.completion_percentage, 0)
+  from public.profiles as profile
+  left join member_progress as progress on progress.employee_id = profile.id
+  where profile.role = 'employee'
+    and (select auth.uid()) is not null
+  order by profile.full_name;
+$$;
+
+revoke all on function public.workspace_team_workload() from public;
+grant execute on function public.workspace_team_workload() to authenticated;
+
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'report-attachments',
