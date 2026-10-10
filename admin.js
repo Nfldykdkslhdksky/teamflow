@@ -40,7 +40,7 @@ import {
     }
     return;
   }
-  const adminSession = { id: session.user.id, name: adminProfile.full_name, role: adminProfile.role };
+  const adminSession = { id: session.user.id, name: adminProfile.full_name, role: adminProfile.role, email: session.user.email };
   let team = [];
   let employeeProfilesLoaded = false;
   async function refreshEmployeeProfiles() {
@@ -404,6 +404,9 @@ import {
 
   $("#adminName").textContent = adminSession.name;
   $("#adminInitials").textContent = adminSession.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+  $("#adminTopAvatar").textContent = adminSession.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+  document.querySelectorAll("[data-account-name]").forEach((element) => { element.textContent = adminSession.name; });
+  document.querySelectorAll("[data-account-email]").forEach((element) => { element.textContent = adminSession.email || "Unavailable"; });
   $("#adminDate").textContent = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).toUpperCase();
   $("#adminSearch").addEventListener("input", () => {
     if (activeView === "messages") renderChatDirectory();
@@ -538,11 +541,34 @@ import {
     }
   });
   $("#newTaskButton").addEventListener("click", () => $("#adminTaskModal").showModal());
-  $("#logoutButton").addEventListener("click", () => {
-    supabase.auth.signOut().then(({ error }) => {
-      if (error) showToast(`Couldn't sign out: ${error.message}`);
-      else window.location.replace("login.html");
-    });
+  document.querySelectorAll("[data-account-menu-toggle]").forEach((toggle) => toggle.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const menu = toggle.closest(".account-control").querySelector("[data-account-menu]");
+    const willOpen = menu.hidden;
+    document.querySelectorAll("[data-account-menu]").forEach((item) => { item.hidden = true; });
+    document.querySelectorAll("[data-account-menu-toggle]").forEach((item) => item.setAttribute("aria-expanded", "false"));
+    menu.hidden = !willOpen;
+    toggle.setAttribute("aria-expanded", String(willOpen));
+  }));
+  document.querySelectorAll("[data-account-logout]").forEach((button) => button.addEventListener("click", async () => {
+    button.disabled = true;
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      button.disabled = false;
+      showToast(`Couldn't sign out: ${error.message}`);
+    } else {
+      window.location.replace("login.html");
+    }
+  }));
+  document.addEventListener("click", (event) => {
+    if (event.target.closest(".account-control")) return;
+    document.querySelectorAll("[data-account-menu]").forEach((menu) => { menu.hidden = true; });
+    document.querySelectorAll("[data-account-menu-toggle]").forEach((toggle) => toggle.setAttribute("aria-expanded", "false"));
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    document.querySelectorAll("[data-account-menu]").forEach((menu) => { menu.hidden = true; });
+    document.querySelectorAll("[data-account-menu-toggle]").forEach((toggle) => toggle.setAttribute("aria-expanded", "false"));
   });
   document.querySelectorAll("[data-admin-view]").forEach((link) => link.addEventListener("click", (event) => {
     event.preventDefault();

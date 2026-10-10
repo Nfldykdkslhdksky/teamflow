@@ -355,11 +355,37 @@ $("#mobileMenu").addEventListener("click", () => $("#sidebar").classList.toggle(
 $("#notificationButton").addEventListener("click", () => showToast("You're all caught up."));
 $("#settingsButton").addEventListener("click", () => showToast("Workspace settings are coming soon."));
 $("#exploreButton").addEventListener("click", () => showToast("You're already using TEAM FLOW Intelligence ✳"));
-$(".profile-button").addEventListener("click", () => {
-  supabase.auth.signOut().then(({ error }) => {
-    if (error) showToast(`Couldn't sign out: ${error.message}`);
-    else window.location.replace("login.html");
-  });
+document.querySelectorAll("[data-account-name]").forEach((element) => { element.textContent = currentSession.name; });
+document.querySelectorAll("[data-account-email]").forEach((element) => { element.textContent = currentSession.email || "Unavailable"; });
+document.querySelectorAll("[data-account-menu-toggle]").forEach((toggle) => toggle.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const control = toggle.closest(".account-control");
+  const menu = control.querySelector("[data-account-menu]");
+  const willOpen = menu.hidden;
+  document.querySelectorAll("[data-account-menu]").forEach((item) => { item.hidden = true; });
+  document.querySelectorAll("[data-account-menu-toggle]").forEach((item) => item.setAttribute("aria-expanded", "false"));
+  menu.hidden = !willOpen;
+  toggle.setAttribute("aria-expanded", String(willOpen));
+}));
+document.querySelectorAll("[data-account-logout]").forEach((button) => button.addEventListener("click", async () => {
+  button.disabled = true;
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    button.disabled = false;
+    showToast(`Couldn't sign out: ${error.message}`);
+  } else {
+    window.location.replace("login.html");
+  }
+}));
+document.addEventListener("click", (event) => {
+  if (event.target.closest(".account-control")) return;
+  document.querySelectorAll("[data-account-menu]").forEach((menu) => { menu.hidden = true; });
+  document.querySelectorAll("[data-account-menu-toggle]").forEach((toggle) => toggle.setAttribute("aria-expanded", "false"));
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  document.querySelectorAll("[data-account-menu]").forEach((menu) => { menu.hidden = true; });
+  document.querySelectorAll("[data-account-menu-toggle]").forEach((toggle) => toggle.setAttribute("aria-expanded", "false"));
 });
 document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => closeModal(button)));
 document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("click", (event) => {
@@ -432,7 +458,7 @@ if (signedInMember) {
   $(".profile-button .avatar").textContent = signedInMember.initials;
   $(".profile-button .avatar").className = `avatar ${signedInMember.color}`;
   $("#topAvatar").textContent = signedInMember.initials;
-  $("#topAvatar").className = `avatar top-avatar ${signedInMember.color}`;
+  $("#topAvatar").className = `avatar top-avatar account-avatar-button ${signedInMember.color}`;
 }
 renderAll();
 try {

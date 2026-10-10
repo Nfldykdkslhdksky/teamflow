@@ -30,7 +30,14 @@
         <div class="sidebar-bottom">
           <div class="upgrade-card"><div class="upgrade-spark">✳</div><strong>Make teamwork<br />feel effortless.</strong><p>See how TEAM FLOW can help your team do its best work.</p><button id="exploreButton">Explore TEAM FLOW <span>↗</span></button></div>
           <button class="nav-link settings-link" id="settingsButton"><span class="nav-icon">⚙</span>Settings</button>
-          <button class="profile-button"><span class="avatar avatar-me">EP</span><span class="profile-copy"><strong>Employee</strong><small>Team member</small></span><span class="profile-more">···</span></button>
+          <div class="account-control account-control-sidebar">
+            <button class="profile-button" type="button" data-account-menu-toggle aria-expanded="false"><span class="avatar avatar-me">EP</span><span class="profile-copy"><strong>Employee</strong><small>Team member</small></span><span class="profile-more">···</span></button>
+            <div class="account-dropdown" data-account-menu hidden>
+              <strong data-account-name>Employee</strong><span class="account-role">Employee account</span>
+              <div class="account-login"><span>Login ID</span><strong data-account-email></strong></div>
+              <button type="button" class="account-logout" data-account-logout>Log out</button>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -41,7 +48,14 @@
           <div class="topbar-actions">
             <label class="search-box"><span aria-hidden="true">⌕</span><input id="searchInput" type="search" placeholder="Search anything..." aria-label="Search tasks and team" /><kbd>⌘ K</kbd></label>
             <button class="icon-button notification-button" id="notificationButton" aria-label="Notifications">♧<i></i></button>
-            <span class="avatar avatar-me top-avatar" id="topAvatar">JD</span>
+            <div class="account-control account-control-top">
+              <button class="avatar avatar-me top-avatar account-avatar-button" id="topAvatar" type="button" data-account-menu-toggle aria-label="Open account menu" aria-expanded="false">JD</button>
+              <div class="account-dropdown" data-account-menu hidden>
+                <strong data-account-name>Employee</strong><span class="account-role">Employee account</span>
+                <div class="account-login"><span>Login ID</span><strong data-account-email></strong></div>
+                <button type="button" class="account-logout" data-account-logout>Log out</button>
+              </div>
+            </div>
           </div>
         </header>
 
