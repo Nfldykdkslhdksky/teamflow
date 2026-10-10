@@ -10,6 +10,13 @@ import {
   sendConversationMessage
 } from "./workspace-communications.js";
 import { skillMatchScore } from "./skill-matching.js";
+import {
+  fetchWorkspaceTasks,
+  importLegacyWorkspaceTasks,
+  insertWorkspaceTask,
+  updateWorkspaceTask,
+  workspaceTaskFromRow
+} from "./workspace-tasks.js";
 
 (async () => {
   if (!supabaseConfigured) {
@@ -545,7 +552,7 @@ import { skillMatchScore } from "./skill-matching.js";
   document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("click", (event) => {
     if (event.target === dialog) dialog.close();
   }));
-  $("#adminTaskRows").addEventListener("change", (event) => {
+  $("#adminTaskRows").addEventListener("change", async (event) => {
     const select = event.target.closest("[data-assignment]");
     if (!select) return;
     const task = tasks.find((item) => String(item.id) === select.dataset.assignment);
@@ -554,33 +561,43 @@ import { skillMatchScore } from "./skill-matching.js";
     task.assignee = select.value;
     const assignedMember = team.find((member) => member.name === task.assignee);
     activities.unshift({ name: assignedMember?.name || adminSession.name, initials: assignedMember?.initials || adminSession.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2), color: assignedMember?.color || "avatar-me", text: task.assignee ? `was assigned <strong>${escapeHTML(task.title)}</strong> by ${escapeHTML(adminSession.name)}` : `was unassigned from <strong>${escapeHTML(task.title)}</strong> by ${escapeHTML(adminSession.name)}`, time: "just now" });
-    if (persist()) {
+    select.disabled = true;
+    try {
+      await updateWorkspaceTask(supabase, task, team);
+      persist();
       render();
       showToast(task.assignee ? `${task.title} assigned to ${task.assignee}.` : `${task.title} is unassigned.`);
-    } else {
+    } catch (error) {
       task.assignee = previousAssignee;
       activities.shift();
       render();
+      showToast(`Couldn't save this assignment: ${error.message}`);
     }
   });
-  $("#adminTaskForm").addEventListener("submit", (event) => {
+  $("#adminTaskForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const title = $("#adminTaskTitle").value.trim();
     if (!title) return;
     const due = $("#adminTaskDue").value;
     const assignee = $("#adminTaskAssignee").value;
     const task = {
-      id: Math.max(0, ...tasks.map((item) => Number(item.id) || 0)) + 1,
       title, project: $("#adminTaskProject").value.trim(), skill: $("#adminTaskSkill").value,
       assignee, priority: $("#adminTaskPriority").value, due: due || "", status: "To do"
     };
-    tasks.unshift(task);
     const assignedMember = team.find((member) => member.name === assignee);
     activities.unshift({ name: assignedMember?.name || adminSession.name, initials: assignedMember?.initials || adminSession.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2), color: assignedMember?.color || "avatar-me", text: assignee ? `was assigned <strong>${escapeHTML(title)}</strong> by ${escapeHTML(adminSession.name)}` : `created <strong>${escapeHTML(title)}</strong>`, time: "just now" });
-    if (!persist()) {
-      tasks.shift();
+    const submitButton = $("#adminTaskForm button[type='submit']");
+    submitButton.disabled = true;
+    try {
+      const row = await insertWorkspaceTask(supabase, task, team);
+      tasks.unshift(workspaceTaskFromRow(row, team));
+      persist();
+    } catch (error) {
       activities.shift();
+      showToast(`Couldn't create the task: ${error.message}`);
       return;
+    } finally {
+      submitButton.disabled = false;
     }
     render();
     $("#adminTaskForm").reset();
@@ -588,7 +605,7 @@ import { skillMatchScore } from "./skill-matching.js";
     $("#adminTaskModal").close();
     showToast(assignee ? "Task created and assigned." : "Task created. It is ready to assign.");
   });
-  $("#applyAdminMatches").addEventListener("click", () => {
+  $("#applyAdminMatches").addEventListener("click", async () => {
     const selected = [...$("#adminSuggestionList").querySelectorAll("input[type='checkbox']:checked")]
       .map((input) => {
         const index = Number(input.value);
@@ -614,9 +631,20 @@ import { skillMatchScore } from "./skill-matching.js";
       showToast("Those tasks have already been assigned. Refresh suggestions and try again.");
       return;
     }
-    if (!persist()) {
-      changed.forEach(({ task }) => { task.assignee = ""; });
+    try {
+      for (const { task } of changed) await updateWorkspaceTask(supabase, task, team);
+      persist();
+    } catch (error) {
+      try {
+        const rows = await fetchWorkspaceTasks(supabase);
+        tasks = rows.map((row) => workspaceTaskFromRow(row, team));
+      } catch (refreshError) {
+        showToast(`Assignments may have partially saved. Couldn't reload tasks: ${refreshError.message}`);
+        return;
+      }
       activities = activities.slice(changed.length);
+      render();
+      showToast(`Some assignments may not have saved: ${error.message}`);
       return;
     }
     render();
@@ -629,6 +657,16 @@ import { skillMatchScore } from "./skill-matching.js";
     const checkbox = $("#adminSuggestionList").querySelector(`input[type='checkbox'][value="${ownerSelect.dataset.suggestionOwner}"]`);
     if (checkbox) checkbox.checked = true;
   });
+  try {
+    let rows = await fetchWorkspaceTasks(supabase);
+    if (!rows.length) {
+      rows = await importLegacyWorkspaceTasks(supabase, tasks, team);
+    }
+    tasks = rows.map((row) => workspaceTaskFromRow(row, team));
+    persist();
+  } catch (error) {
+    showToast(`Couldn't load shared tasks: ${error.message}`);
+  }
   render();
   try {
     workspaceDirectory = await fetchWorkspaceDirectory(supabase);
@@ -648,6 +686,13 @@ import { skillMatchScore } from "./skill-matching.js";
     showToast(`Couldn't load chats: ${error.message}`);
   }
   window.setInterval(async () => {
+    try {
+      const rows = await fetchWorkspaceTasks(supabase);
+      tasks = rows.map((row) => workspaceTaskFromRow(row, team));
+      if (activeView === "tasks") render();
+    } catch (error) {
+      showToast(`Couldn't refresh shared tasks: ${error.message}`);
+    }
     if (activeView === "messages") {
       try { await refreshChats(); }
       catch (error) { $("#adminChatStatus").textContent = `Sync error: ${error.message}`; }

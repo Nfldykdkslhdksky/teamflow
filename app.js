@@ -9,6 +9,11 @@ import {
   sendConversationMessage,
   submitEmployeeReport
 } from "./workspace-communications.js";
+import {
+  fetchWorkspaceTasks,
+  updateWorkspaceTaskStatus,
+  workspaceTaskFromRow
+} from "./workspace-tasks.js";
 
 (async () => {
 if (!supabaseConfigured) {
@@ -44,38 +49,14 @@ const currentMember = {
   skills: currentSession.skills,
   capacity: 70
 };
-function dateFromNow(days) {
-  const date = new Date();
-  date.setHours(12, 0, 0, 0);
-  date.setDate(date.getDate() + days);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-const initialTasks = [
-  { id: 1, title: "Redesign onboarding flow", project: "Website redesign", assignee: "", priority: "High", due: dateFromNow(3), status: "In progress", skill: "Product design" },
-  { id: 2, title: "API integration for dashboard", project: "Analytics platform", assignee: "", priority: "High", due: dateFromNow(4), status: "In progress", skill: "Backend development" },
-  { id: 3, title: "Write product launch copy", project: "Spring launch", assignee: "", priority: "Medium", due: dateFromNow(6), status: "To do", skill: "Content writing" },
-  { id: 4, title: "Set up component library", project: "Website redesign", assignee: "", priority: "Medium", due: dateFromNow(7), status: "In review", skill: "Frontend development" },
-  { id: 5, title: "Analyze customer feedback", project: "Research sprint", assignee: "", priority: "Low", due: dateFromNow(9), status: "To do", skill: "Data analysis" },
-  { id: 6, title: "Map user journey", project: "Website redesign", assignee: "", priority: "Medium", due: dateFromNow(10), status: "Completed", skill: "Research" },
-  { id: 7, title: "Prepare project kickoff", project: "Spring launch", assignee: "", priority: "High", due: dateFromNow(2), status: "To do", skill: "Project management" },
-  { id: 8, title: "Review accessibility audit", project: "Website redesign", assignee: "", priority: "Medium", due: dateFromNow(5), status: "To do", skill: "Product design" },
-  { id: 9, title: "Build reporting prototype", project: "Analytics platform", assignee: "", priority: "Medium", due: dateFromNow(8), status: "To do", skill: "Data analysis" }
-];
 const savedState = (() => {
   try { return JSON.parse(localStorage.getItem("orbit-workspace") || "{}"); }
   catch { return {}; }
 })();
 const importedTeam = Array.isArray(savedState.team) ? savedState.team.filter((member) => member.id && member.email) : [];
 let team = [...importedTeam.filter((member) => member.name !== currentSession.name), currentMember];
-let tasks = Array.isArray(savedState.tasks) ? savedState.tasks : initialTasks;
+let tasks = [];
 let activities = Array.isArray(savedState.activities) ? savedState.activities : [];
-let assignmentsNeedCleanup = false;
-tasks.forEach((task) => {
-  if (task.assignee && !team.some((member) => member.name === task.assignee)) {
-    task.assignee = "";
-    assignmentsNeedCleanup = true;
-  }
-});
 let activeFilter = "all";
 let activeView = "dashboard";
 let workspaceDirectory = [];
@@ -93,8 +74,13 @@ function persist() {
   try { localStorage.setItem("orbit-workspace", JSON.stringify({ team, tasks, activities })); }
   catch { showToast("Your browser couldn't save changes. Check available storage."); }
 }
-if (assignmentsNeedCleanup || importedTeam.length !== (Array.isArray(savedState.team) ? savedState.team.length : 0)) persist();
+if (importedTeam.length !== (Array.isArray(savedState.team) ? savedState.team.length : 0)) persist();
 function memberFor(name) { return team.find((member) => member.name === name); }
+async function refreshEmployeeTasks() {
+  const rows = await fetchWorkspaceTasks(supabase);
+  tasks = rows.map((row) => workspaceTaskFromRow(row, team));
+  renderAll();
+}
 function shortDate(value) {
   if (!value) return "No date";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
@@ -415,14 +401,25 @@ $("#reportForm").addEventListener("submit", async (event) => {
     submitButton.disabled = false;
   }
 });
-$("#taskRows").addEventListener("click", (event) => {
+$("#taskRows").addEventListener("click", async (event) => {
   const button = event.target.closest("[data-task-action]");
   if (!button) return;
   const task = tasks.find((item) => item.id === Number(button.dataset.taskAction));
   if (!task || task.assignee !== currentSession.name) return;
   const nextStatus = { "To do": "In progress", "In progress": "In review", "In review": "Completed", Completed: "To do" };
+  const previousStatus = task.status;
   task.status = nextStatus[task.status] || "To do";
-  persist(); renderAll(); showToast(`Task marked ${task.status.toLowerCase()}.`);
+  button.disabled = true;
+  renderAll();
+  try {
+    await updateWorkspaceTaskStatus(supabase, task.id, task.status);
+    persist();
+    showToast(`Task marked ${task.status.toLowerCase()}.`);
+  } catch (error) {
+    task.status = previousStatus;
+    renderAll();
+    showToast(`Couldn't update this task: ${error.message}`);
+  }
 });
 
 const today = new Date();
@@ -454,6 +451,11 @@ try {
   showToast(`Couldn't load workspace members: ${error.message}`);
 }
 try {
+  await refreshEmployeeTasks();
+} catch (error) {
+  showToast(`Couldn't load assigned tasks: ${error.message}`);
+}
+try {
   await refreshEmployeeReports();
 } catch (error) {
   showToast(`Couldn't load report reviews: ${error.message}`);
@@ -464,6 +466,11 @@ try {
   showToast(`Couldn't load chats: ${error.message}`);
 }
 window.setInterval(async () => {
+  try {
+    await refreshEmployeeTasks();
+  } catch (error) {
+    showToast(`Couldn't refresh assigned tasks: ${error.message}`);
+  }
   if (activeView === "messages") {
     try { await refreshChats(); }
     catch (error) { $("#employeeChatStatus").textContent = `Sync error: ${error.message}`; }

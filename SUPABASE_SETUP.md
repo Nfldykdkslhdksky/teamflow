@@ -6,7 +6,7 @@ The browser UI uses Supabase Auth for real employee sign-in. Employee accounts a
 
 1. Create a Supabase project and copy its **Project URL** and **publishable key** (or legacy anon key).
 2. Put those two public values in `supabase-client.js`. Never put a `service_role` key in browser code or commit one to this repository.
-3. Run the **entire contents** of `supabase/schema.sql` in the Supabase SQL Editor. It creates/backfills profiles, private one-to-one chat tables, employee report/review tables, and the private report-attachment bucket with row-level security. Run the updated script again after pulling schema changes; its policies and bucket setup are safe to re-apply.
+3. Run the **entire contents** of `supabase/schema.sql` in the Supabase SQL Editor. It creates/backfills profiles, shared task assignments, private one-to-one chat tables, employee report/review tables, and the private report-attachment bucket with row-level security. Run the updated script again after pulling schema changes; its policies and bucket setup are safe to re-apply.
 4. Create the first administrator in Supabase Authentication > Users (or keep the account you already created). Then run the following SQL with that account's email:
 
    ```sql
@@ -50,8 +50,9 @@ Imports support up to 100 rows and report results per account. Employees sign in
 - Chats are private, direct conversations between two signed-in workspace members. The app uses `public.workspace_directory()` to populate chat recipients; database RLS restricts each conversation and its messages to those two participants.
 - Employees can submit reports with an optional PDF, image, text/CSV, Word, or Excel attachment up to **3 MiB (3,145,728 bytes)**. The attachment bucket is private; employees can access their own files, and admins can access files attached to reports they review.
 - Admins use **Report reviews** to approve a report or request changes and leave an optional review note. Employees see pending, approved, or rejected status and any review note on their dashboard and report history.
+- Task assignments and employee task-status changes are stored in Supabase and shared across devices. The first admin sign-in after adding this schema imports the tasks from that admin browser's existing local workspace when the shared task table is empty.
 - If these features were already loaded in a browser before the schema update, run the updated schema script in the Supabase SQL Editor, then reload the site and sign in again. Existing browser-only messages/reports are not automatically imported into the new database.
 
 ## Important security boundary
 
-The web pages redirect users based on their Supabase profile, and the importer verifies admin role on the server. The database also enforces report/chat permissions with row-level security. Task assignments and other prototype workspace data still use browser `localStorage`, so they are not yet shared across employee devices. Never put the Supabase service-role key in the static site. Delete plaintext employee-import CSVs after importing and rotate temporary passwords shared in those files.
+The web pages redirect users based on their Supabase profile, and the importer verifies admin role on the server. The database also enforces task, report, and chat permissions with row-level security. Activities and other non-task prototype workspace data may still use browser `localStorage`; never put the Supabase service-role key in the static site. Delete plaintext employee-import CSVs after importing and rotate temporary passwords shared in those files.
