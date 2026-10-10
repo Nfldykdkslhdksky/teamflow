@@ -140,7 +140,11 @@ import {
     const status = $("#adminStatusFilter").value;
     const visible = tasks.filter((task) => {
       const searchMatch = !search || `${task.title} ${task.project} ${task.skill} ${task.assignee}`.toLowerCase().includes(search);
-      return searchMatch && (status === "all" || task.status === status);
+      const statusMatch = status === "all"
+        || status === "active" && task.status !== "Completed"
+        || status === "unassigned" && !task.assignee && task.status !== "Completed"
+        || task.status === status;
+      return searchMatch && statusMatch;
     });
     const projects = new Map();
     visible.forEach((task) => {
@@ -182,6 +186,12 @@ import {
     const previous = assignment.value;
     assignment.innerHTML = `<option value="">Leave unassigned</option>${team.map((member) => `<option value="${escapeHTML(member.name)}">${escapeHTML(member.name)} · ${escapeHTML(member.skills.join(", "))}</option>`).join("")}`;
     if (team.some((member) => member.name === previous)) assignment.value = previous;
+  }
+  function renderTeamDirectory() {
+    $("#teamMemberDirectory").innerHTML = team.map((member) => `<article class="team-directory-member">
+      <span class="avatar ${escapeHTML(member.color)}">${escapeHTML(member.initials)}</span>
+      <span class="team-directory-copy"><strong>${escapeHTML(member.name)}</strong><small>${escapeHTML(member.email || "No login email")}</small><small>${escapeHTML(member.skills.length ? member.skills.join(", ") : "Skills not added")}</small></span>
+    </article>`).join("") || '<div class="admin-message-empty">No employee accounts have been added yet.</div>';
   }
   function directoryName(id) {
     return workspaceDirectory.find((person) => person.id === id)?.full_name || "Workspace member";
@@ -468,6 +478,28 @@ import {
     }
   });
   $("#adminStatusFilter").addEventListener("change", render);
+  function activateSummaryCard(card) {
+    const filter = card.dataset.adminCard;
+    if (filter === "team") {
+      renderTeamDirectory();
+      $("#teamMembersModal").showModal();
+      return;
+    }
+    $("#adminStatusFilter").value = filter === "completed" ? "Completed" : filter;
+    render();
+    $("#adminTaskPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  document.querySelector(".admin-stats").addEventListener("click", (event) => {
+    const card = event.target.closest("[data-admin-card]");
+    if (card) activateSummaryCard(card);
+  });
+  document.querySelector(".admin-stats").addEventListener("keydown", (event) => {
+    const card = event.target.closest("[data-admin-card]");
+    if (card && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      activateSummaryCard(card);
+    }
+  });
   $("#adminTaskRows").addEventListener("click", (event) => {
     const toggle = event.target.closest("[data-project-toggle]");
     if (!toggle) return;
@@ -533,6 +565,7 @@ import {
       workspaceDirectory = await fetchWorkspaceDirectory(supabase);
       render();
       renderChatDirectory();
+      if ($("#teamMembersModal").open) renderTeamDirectory();
     } catch (error) {
       status.textContent = `Import failed: ${error.message}`;
     } finally {
