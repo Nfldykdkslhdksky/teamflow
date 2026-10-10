@@ -14,6 +14,7 @@ import {
   fetchWorkspaceTasks,
   importLegacyWorkspaceTasks,
   insertWorkspaceTask,
+  deleteWorkspaceTasks,
   updateWorkspaceTask,
   workspaceTaskFromRow
 } from "./workspace-tasks.js";
@@ -157,21 +158,25 @@ import {
       const isExpanded = expandedProjects.has(project);
       const taskRows = projectTasks.map((task) => {
         const options = `<option value="">Unassigned</option>${team.map((member) => `<option value="${escapeHTML(member.name)}" ${task.assignee === member.name ? "selected" : ""}>${escapeHTML(member.name)}</option>`).join("")}`;
+        const progress = task.completionPercentage > 0 ? `<small class="task-completion">${escapeHTML(task.completionPercentage)}% complete</small>` : "";
         return `<tr><td><div class="task-name">${escapeHTML(task.title)}</div></td>
           <td>${escapeHTML(task.skill)}</td><td><span class="priority priority-${escapeHTML(task.priority.toLowerCase())}">${escapeHTML(task.priority)}</span></td>
-          <td><span class="due-cell">${escapeHTML(shortDate(task.due))}</span></td>
+          <td><span class="due-cell">${escapeHTML(shortDate(task.due))}</span>${progress}</td>
           <td><span class="status-pill status-${escapeHTML(task.status.toLowerCase().replaceAll(" ", "-"))}">${escapeHTML(task.status)}</span></td>
-          <td><select class="assignee-select" data-assignment="${escapeHTML(task.id)}" aria-label="Assign ${escapeHTML(task.title)}">${options}</select></td></tr>`;
+          <td><div class="admin-task-actions"><select class="assignee-select" data-assignment="${escapeHTML(task.id)}" aria-label="Assign ${escapeHTML(task.title)}">${options}</select><button type="button" class="admin-delete-button" data-delete-task="${escapeHTML(task.id)}" aria-label="Delete task ${escapeHTML(task.title)}">Delete</button></div></td></tr>`;
       }).join("");
       return `<article class="admin-project-card${isExpanded ? " expanded" : ""}">
-        <button type="button" class="admin-project-toggle" data-project-toggle="${escapeHTML(project)}" aria-expanded="${isExpanded}" aria-controls="${projectId}-details">
-          <span class="admin-project-icon" aria-hidden="true">▦</span>
-          <span class="admin-project-title">${escapeHTML(project)}</span>
-          <span class="admin-project-count">${projectTasks.length} ${projectTasks.length === 1 ? "task" : "tasks"}</span>
-          <span class="admin-project-chevron" aria-hidden="true">${isExpanded ? "⌃" : "⌄"}</span>
-        </button>
+        <div class="admin-project-heading">
+          <button type="button" class="admin-project-toggle" data-project-toggle="${escapeHTML(project)}" aria-expanded="${isExpanded}" aria-controls="${projectId}-details">
+            <span class="admin-project-icon" aria-hidden="true">▦</span>
+            <span class="admin-project-title">${escapeHTML(project)}</span>
+            <span class="admin-project-count">${projectTasks.length} ${projectTasks.length === 1 ? "task" : "tasks"}</span>
+            <span class="admin-project-chevron" aria-hidden="true">${isExpanded ? "⌃" : "⌄"}</span>
+          </button>
+          <button type="button" class="admin-delete-button admin-delete-project" data-delete-project="${escapeHTML(project)}" aria-label="Delete project ${escapeHTML(project)} and all its tasks">Delete project</button>
+        </div>
         <div class="admin-project-details${isExpanded ? "" : " hidden"}" id="${projectId}-details">
-          <div class="task-table-wrap"><table class="task-table admin-task-table"><thead><tr><th>TASK</th><th>SKILL</th><th>PRIORITY</th><th>DUE DATE</th><th>STATUS</th><th>ASSIGN TO</th></tr></thead><tbody>${taskRows}</tbody></table></div>
+          <div class="task-table-wrap"><table class="task-table admin-task-table"><thead><tr><th>TASK</th><th>SKILL</th><th>PRIORITY</th><th>DUE DATE</th><th>STATUS</th><th>ASSIGN / DELETE</th></tr></thead><tbody>${taskRows}</tbody></table></div>
         </div>
       </article>`;
     }).join("");
@@ -256,7 +261,7 @@ import {
     const search = $("#adminSearch").value.trim().toLowerCase();
     const visible = reports.filter((report) => {
       const employee = team.find((member) => member.id === report.employee_id);
-      const searchMatch = !search || `${employee?.name || directoryName(report.employee_id)} ${report.task_title} ${report.body} ${report.status} ${report.review_note || ""}`.toLowerCase().includes(search);
+      const searchMatch = !search || `${employee?.name || directoryName(report.employee_id)} ${report.task_title} ${report.body} ${report.status} ${report.review_note || ""} ${report.completion_percentage ?? ""}`.toLowerCase().includes(search);
       return searchMatch && (filter === "all" || report.status === filter);
     });
     const pendingCount = reports.filter((report) => report.status === "pending").length;
@@ -276,6 +281,7 @@ import {
       const employee = team.find((member) => member.id === report.employee_id);
       return `<article class="admin-report-card">
         <header class="admin-report-card-heading"><div><strong>${escapeHTML(employee?.name || directoryName(report.employee_id))}</strong><span>${escapeHTML(report.task_title || "General update")} · ${escapeHTML(new Date(report.created_at).toLocaleString())}</span></div><span class="report-status report-status-${escapeHTML(report.status)}">${escapeHTML(report.status)}</span></header>
+        ${report.completion_percentage != null ? `<div class="report-completion-summary"><span>Task completion</span><strong>${escapeHTML(report.completion_percentage)}%</strong></div>` : ""}
         <p class="admin-report-body">${escapeHTML(report.body)}</p><div class="admin-report-attachment">${attachmentMarkup}</div>
         ${report.status === "pending" ? `<form class="admin-review-form" data-report-review="${escapeHTML(report.id)}"><textarea maxlength="1000" placeholder="Optional review note"></textarea><div><button type="submit" class="button button-primary" data-review-status="approved">Approve</button><button type="submit" class="button button-outline" data-review-status="rejected">Request changes</button></div></form>` : `<p class="admin-review-note">${report.review_note ? `Review note: ${escapeHTML(report.review_note)}` : "No review note."}${report.reviewed_at ? ` · Reviewed ${escapeHTML(new Date(report.reviewed_at).toLocaleString())}` : ""}</p>`}
       </article>`;
@@ -500,7 +506,49 @@ import {
       activateSummaryCard(card);
     }
   });
-  $("#adminTaskRows").addEventListener("click", (event) => {
+  $("#adminTaskRows").addEventListener("click", async (event) => {
+    const deleteTaskButton = event.target.closest("[data-delete-task]");
+    if (deleteTaskButton) {
+      const taskId = Number(deleteTaskButton.dataset.deleteTask);
+      const task = tasks.find((item) => item.id === taskId);
+      if (!task || !window.confirm(`Delete task "${task.title}"? This cannot be undone.`)) return;
+      deleteTaskButton.disabled = true;
+      try {
+        await deleteWorkspaceTasks(supabase, [taskId]);
+        tasks = tasks.filter((item) => item.id !== taskId);
+        persist();
+        render();
+        showToast(`Task "${task.title}" deleted.`);
+      } catch (error) {
+        deleteTaskButton.disabled = false;
+        showToast(`Couldn't delete task: ${error.message}`);
+      }
+      return;
+    }
+
+    const deleteProjectButton = event.target.closest("[data-delete-project]");
+    if (deleteProjectButton) {
+      const project = deleteProjectButton.dataset.deleteProject;
+      const projectTasks = tasks.filter((item) => (item.project || "Uncategorized") === project);
+      if (!projectTasks.length) return;
+      const taskLabel = projectTasks.length === 1 ? "task" : "tasks";
+      if (!window.confirm(`Delete project "${project}" and all ${projectTasks.length} ${taskLabel}? This cannot be undone.`)) return;
+      deleteProjectButton.disabled = true;
+      try {
+        await deleteWorkspaceTasks(supabase, projectTasks.map((task) => task.id));
+        const deletedIds = new Set(projectTasks.map((task) => task.id));
+        tasks = tasks.filter((task) => !deletedIds.has(task.id));
+        expandedProjects.delete(project);
+        persist();
+        render();
+        showToast(`Project "${project}" and its ${taskLabel} deleted.`);
+      } catch (error) {
+        deleteProjectButton.disabled = false;
+        showToast(`Couldn't delete project: ${error.message}`);
+      }
+      return;
+    }
+
     const toggle = event.target.closest("[data-project-toggle]");
     if (!toggle) return;
     const project = toggle.dataset.projectToggle;

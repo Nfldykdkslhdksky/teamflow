@@ -40,6 +40,15 @@
 .admin-project-card{overflow:hidden;border:1px solid #e1ebf6;border-radius:10px;background:linear-gradient(112deg,#fff 0%,#f8fcff 48%,#eaf5ff 100%);box-shadow:0 2px 8px #263d5a0a;transition:box-shadow .18s ease,transform .18s ease,border-color .18s ease}
 .admin-project-card:hover{border-color:#c7dff4;box-shadow:0 5px 16px #263d5a16;transform:translateY(-1px)}
 .admin-project-card.expanded{border-color:#c7dff4}
+.admin-project-heading{display:flex;align-items:center;gap:8px;padding-right:12px}
+.admin-project-heading .admin-project-toggle{width:auto;flex:1;min-width:0}
+.admin-delete-button{flex:0 0 auto;border:1px solid #f0d5d6;border-radius:6px;background:#fff;color:#ad4a50;padding:6px 9px;font-size:9px;font-weight:600;transition:background .15s ease,border-color .15s ease}
+.admin-delete-button:hover,.admin-delete-button:focus-visible{border-color:#df9c9f;background:#fff3f3;outline:2px solid #f1c6c8;outline-offset:1px}
+.admin-delete-button:disabled{opacity:.55;cursor:wait}
+.admin-delete-project{white-space:nowrap}
+.admin-task-actions{display:flex;align-items:center;gap:6px}
+.admin-task-actions .assignee-select{min-width:100px;flex:1}
+.admin-task-actions .admin-delete-button{padding:5px 7px}
 .admin-project-toggle{display:flex;align-items:center;gap:11px;width:100%;min-height:61px;padding:11px 15px;border:0;background:transparent;color:#373849;text-align:left}
 .admin-project-toggle:focus-visible{outline:2px solid #8bbce8;outline-offset:-3px}
 .admin-project-icon{width:31px;height:31px;flex:0 0 auto;display:grid;place-items:center;border:1px solid #dbeaf8;border-radius:8px;background:#fff;color:#6694bf;font-size:16px}
@@ -52,9 +61,18 @@
 .admin-project-details .task-table td,.admin-project-details .task-name{font-size:10px}
 .admin-project-details .task-project,.admin-project-details .assignee-name,.admin-project-details .priority,.admin-project-details .due-cell{font-size:9px}
 .admin-project-details .status-pill{font-size:8px}
+.admin-project-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .admin-page .assignee-select,.admin-page .admin-filter{font-size:10px}
 .admin-page .employee-import-copy p,.admin-page .employee-import-copy code,.admin-page .import-status{font-size:9px}
 .admin-page .employee-import-actions .button{font-size:9px}
+.report-completion-group{display:grid;gap:7px}
+.report-completion-group .field-label{display:flex;justify-content:space-between;align-items:center;margin:0}
+.report-completion-group output{color:#6258cf;font-weight:700}
+.report-completion-group input[type=range]{width:100%;accent-color:#7065e9}
+.report-completion-group small{font-size:9px;line-height:1.5;color:#777b8e}
+.report-completion-summary{display:flex;align-items:center;gap:7px;width:max-content;margin-top:8px;padding:5px 8px;border-radius:6px;background:#f1efff;color:#6258cf;font-size:9px}
+.report-completion-summary strong{font-size:10px}
+.task-completion{display:block;margin-top:4px;font-size:8px;color:#6258cf;font-weight:600}
 .admin-page .nav-link{font-size:13px}
 .admin-page .workspace-label,.admin-page .eyebrow{font-size:10px}
 .admin-page .workspace-name,.admin-page .breadcrumb{font-size:12px}

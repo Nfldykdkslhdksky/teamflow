@@ -113,10 +113,33 @@ create table if not exists public.workspace_tasks (
   due date,
   status text not null default 'To do' check (status in ('To do', 'In progress', 'In review', 'Completed')),
   skill text not null default '',
+  completion_percentage smallint not null default 0
+    constraint workspace_tasks_completion_percentage_range check (completion_percentage between 0 and 100),
   created_by uuid not null default auth.uid() references public.profiles (id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.workspace_tasks
+  add column if not exists completion_percentage smallint not null default 0;
+
+update public.workspace_tasks
+set completion_percentage = 100
+where status = 'Completed' and completion_percentage = 0;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'workspace_tasks_completion_percentage_range'
+      and conrelid = 'public.workspace_tasks'::regclass
+  ) then
+    alter table public.workspace_tasks
+      add constraint workspace_tasks_completion_percentage_range
+      check (completion_percentage between 0 and 100);
+  end if;
+end;
+$$;
 
 alter table public.workspace_tasks enable row level security;
 revoke all on public.workspace_tasks from anon, authenticated;
@@ -157,6 +180,11 @@ begin
 
   update public.workspace_tasks
   set status = new_status,
+      completion_percentage = case
+        when new_status = 'Completed' then 100
+        when new_status = 'To do' then 0
+        else completion_percentage
+      end,
       updated_at = now()
   where id = task_id
     and (
@@ -261,8 +289,11 @@ create trigger on_chat_message_created
 create table if not exists public.employee_reports (
   id uuid primary key default gen_random_uuid(),
   employee_id uuid not null references public.profiles (id) on delete cascade,
+  task_id bigint references public.workspace_tasks (id) on delete set null,
   task_title text not null default '',
   body text not null check (char_length(body) between 1 and 5000),
+  completion_percentage smallint
+    constraint employee_reports_completion_percentage_range check (completion_percentage between 0 and 100),
   attachment_path text,
   attachment_name text,
   attachment_type text,
@@ -277,6 +308,24 @@ create table if not exists public.employee_reports (
   )
 );
 
+alter table public.employee_reports
+  add column if not exists task_id bigint references public.workspace_tasks (id) on delete set null,
+  add column if not exists completion_percentage smallint;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'employee_reports_completion_percentage_range'
+      and conrelid = 'public.employee_reports'::regclass
+  ) then
+    alter table public.employee_reports
+      add constraint employee_reports_completion_percentage_range
+      check (completion_percentage between 0 and 100);
+  end if;
+end;
+$$;
+
 create index if not exists employee_reports_employee_created_idx
   on public.employee_reports (employee_id, created_at desc);
 
@@ -286,7 +335,7 @@ create index if not exists employee_reports_status_created_idx
 alter table public.employee_reports enable row level security;
 
 revoke all on public.employee_reports from anon, authenticated;
-grant select, insert, update on public.employee_reports to authenticated;
+grant select, update on public.employee_reports to authenticated;
 
 drop policy if exists "Employees and admins can read reports" on public.employee_reports;
 create policy "Employees and admins can read reports"
@@ -294,18 +343,6 @@ create policy "Employees and admins can read reports"
   using (employee_id = auth.uid() or (select public.is_workspace_admin()));
 
 drop policy if exists "Employees can submit their own reports" on public.employee_reports;
-create policy "Employees can submit their own reports"
-  on public.employee_reports for insert to authenticated
-  with check (
-    employee_id = auth.uid()
-    and status = 'pending'
-    and review_note is null
-    and reviewed_at is null
-    and (
-      attachment_path is null
-      or split_part(attachment_path, '/', 1) = auth.uid()::text
-    )
-  );
 
 drop policy if exists "Admins can review reports" on public.employee_reports;
 create policy "Admins can review reports"
@@ -315,6 +352,109 @@ create policy "Admins can review reports"
     (select public.is_workspace_admin())
     and status in ('pending', 'approved', 'rejected')
   );
+
+create or replace function public.submit_employee_report(
+  p_task_id bigint,
+  p_completion_percentage smallint,
+  p_body text,
+  p_attachment_path text default null,
+  p_attachment_name text default null,
+  p_attachment_type text default null,
+  p_attachment_size bigint default null
+)
+returns public.employee_reports
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_employee_id uuid := (select auth.uid());
+  v_task_title text := '';
+  v_report public.employee_reports;
+begin
+  if v_employee_id is null then
+    raise exception 'You must be signed in to submit a report';
+  end if;
+
+  if not exists (
+    select 1 from public.profiles
+    where id = v_employee_id and role = 'employee'
+  ) then
+    raise exception 'Only employees can submit progress reports';
+  end if;
+
+  if p_body is null or char_length(btrim(p_body)) not between 1 and 5000 then
+    raise exception 'A report must be between 1 and 5,000 characters';
+  end if;
+
+  if p_task_id is null then
+    if p_completion_percentage is not null then
+      raise exception 'Choose a task before submitting a completion percentage';
+    end if;
+  else
+    if p_completion_percentage is null or p_completion_percentage not between 0 and 100 then
+      raise exception 'Task completion must be between 0 and 100 percent';
+    end if;
+
+    select title into v_task_title
+    from public.workspace_tasks
+    where id = p_task_id and assignee_id = v_employee_id;
+
+    if not found then
+      raise exception 'The selected task is not assigned to your account';
+    end if;
+  end if;
+
+  if p_attachment_path is not null then
+    if split_part(p_attachment_path, '/', 1) <> v_employee_id::text
+      or p_attachment_name is null
+      or p_attachment_type is null
+      or p_attachment_size is null
+      or p_attachment_size not between 1 and 3145728 then
+      raise exception 'The report attachment details are invalid';
+    end if;
+  elsif p_attachment_name is not null or p_attachment_type is not null or p_attachment_size is not null then
+    raise exception 'Attachment details require an uploaded file';
+  end if;
+
+  insert into public.employee_reports (
+    employee_id,
+    task_id,
+    task_title,
+    body,
+    completion_percentage,
+    attachment_path,
+    attachment_name,
+    attachment_type,
+    attachment_size
+  )
+  values (
+    v_employee_id,
+    p_task_id,
+    v_task_title,
+    btrim(p_body),
+    p_completion_percentage,
+    p_attachment_path,
+    p_attachment_name,
+    p_attachment_type,
+    p_attachment_size
+  )
+  returning * into v_report;
+
+  if p_task_id is not null then
+    update public.workspace_tasks
+    set completion_percentage = p_completion_percentage,
+        status = case when p_completion_percentage = 100 then 'Completed' else 'In progress' end,
+        updated_at = now()
+    where id = p_task_id and assignee_id = v_employee_id;
+  end if;
+
+  return v_report;
+end;
+$$;
+
+revoke all on function public.submit_employee_report(bigint, smallint, text, text, text, text, bigint) from public;
+grant execute on function public.submit_employee_report(bigint, smallint, text, text, text, text, bigint) to authenticated;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (

@@ -111,12 +111,13 @@ function renderTasks() {
   $("#taskRows").innerHTML = visible.map((task) => {
     const member = memberFor(task.assignee);
     const statusClass = task.status.toLowerCase().replaceAll(" ", "-");
+    const progress = task.completionPercentage > 0 ? `<small class="task-completion">${escapeHTML(task.completionPercentage)}% complete</small>` : "";
     return `<tr>
       <td><div class="task-name"><span class="task-checkbox ${task.status === "Completed" ? "done" : ""}">${task.status === "Completed" ? "✓" : ""}</span><span>${escapeHTML(task.title)}</span></div><div class="task-project">${escapeHTML(task.project)}</div></td>
       <td>${member ? `<div class="assignee-cell"><span class="avatar avatar-small ${escapeHTML(member.color)}">${escapeHTML(member.initials)}</span><span class="assignee-name">${escapeHTML(member.name.split(" ")[0])}</span></div>` : `<span class="assignee-name unassigned-name">Unassigned</span>`}</td>
       <td><span class="priority priority-${task.priority.toLowerCase()}">${escapeHTML(task.priority)}</span></td>
       <td><span class="due-cell">${escapeHTML(shortDate(task.due))}</span></td>
-      <td><span class="status-pill status-${statusClass}">${escapeHTML(task.status)}</span></td>
+      <td><span class="status-pill status-${statusClass}">${escapeHTML(task.status)}</span>${progress}</td>
       <td><button class="row-more" data-task-action="${task.id}" aria-label="Update task status">···</button></td>
     </tr>`;
   }).join("");
@@ -232,9 +233,10 @@ function renderEmployeeReportCards(container, emptyState, limit = Infinity) {
   const visible = matched.slice(0, limit);
   container.innerHTML = visible.map((report) => {
     const task = report.task_title ? `<span>${escapeHTML(report.task_title)}</span>` : "";
+    const completion = report.completion_percentage == null ? "" : `<span class="report-completion-summary"><span>Task completion</span><strong>${escapeHTML(report.completion_percentage)}%</strong></span>`;
     const review = report.review_note ? `<p class="employee-report-review-note">Review note: ${escapeHTML(report.review_note)}</p>` : "";
     const file = report.attachment_name ? `<span class="employee-report-file">${escapeHTML(report.attachment_name)} · ${(report.attachment_size / (1024 * 1024)).toFixed(2)} MB</span>` : "";
-    return `<article class="employee-report-card"><div class="employee-report-card-heading"><strong>${escapeHTML(new Date(report.created_at).toLocaleString())}</strong><span class="report-status report-status-${escapeHTML(report.status)}">${escapeHTML(report.status)}</span></div>${task}<p>${escapeHTML(report.body)}</p>${file}${review}</article>`;
+    return `<article class="employee-report-card"><div class="employee-report-card-heading"><strong>${escapeHTML(new Date(report.created_at).toLocaleString())}</strong><span class="report-status report-status-${escapeHTML(report.status)}">${escapeHTML(report.status)}</span></div>${task}${completion}<p>${escapeHTML(report.body)}</p>${file}${review}</article>`;
   }).join("");
   emptyState.classList.toggle("hidden", visible.length > 0);
 }
@@ -314,8 +316,14 @@ $("#searchInput").addEventListener("input", () => {
   else if (activeView === "reports") renderEmployeeReportCards($("#employeeReportsList"), $("#employeeReportsEmpty"));
   else renderTasks();
 });
-$("#reportButton").addEventListener("click", () => openModal("#reportModal"));
-$("#employeeNewReportButton").addEventListener("click", () => openModal("#reportModal"));
+$("#reportButton").addEventListener("click", () => {
+  updateReportCompletionControl();
+  openModal("#reportModal");
+});
+$("#employeeNewReportButton").addEventListener("click", () => {
+  updateReportCompletionControl();
+  openModal("#reportModal");
+});
 $("#messageButton").addEventListener("click", () => setView("messages"));
 $("#employeeStartChat").addEventListener("click", async () => {
   try {
@@ -396,6 +404,17 @@ $("#reportAttachment").addEventListener("change", (event) => {
   const file = event.currentTarget.files?.[0];
   $("#reportUploadStatus").textContent = file && file.size > 3 * 1024 * 1024 ? "This file is larger than the 3 MB limit." : "";
 });
+function updateReportCompletionControl() {
+  const selectedTask = tasks.find((task) => String(task.id) === $("#reportTask").value);
+  const completionGroup = $("#reportCompletionGroup");
+  completionGroup.classList.toggle("hidden", !selectedTask);
+  if (selectedTask) $("#reportCompletion").value = selectedTask.completionPercentage ?? 0;
+  $("#reportCompletionValue").textContent = `${$("#reportCompletion").value}%`;
+}
+$("#reportTask").addEventListener("change", updateReportCompletionControl);
+$("#reportCompletion").addEventListener("input", () => {
+  $("#reportCompletionValue").textContent = `${$("#reportCompletion").value}%`;
+});
 $("#reportForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const text = $("#reportText").value.trim();
@@ -408,14 +427,21 @@ $("#reportForm").addEventListener("submit", async (event) => {
   try {
     await submitEmployeeReport(supabase, {
       employeeId: currentMember.id,
-      taskTitle: task?.title || "",
+      taskId: task?.id ?? null,
+      completionPercentage: task ? Number($("#reportCompletion").value) : null,
       body: text,
       file: attachment
     });
     $("#reportForm").reset();
+    updateReportCompletionControl();
     $("#reportUploadStatus").textContent = "";
     $("#reportModal").close();
     showToast("Your report was submitted for review.");
+    try {
+      await refreshEmployeeTasks();
+    } catch (error) {
+      showToast(`Report submitted, but task progress couldn't refresh: ${error.message}`);
+    }
     try {
       await refreshEmployeeReports();
     } catch (error) {

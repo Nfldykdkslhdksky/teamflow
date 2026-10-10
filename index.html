@@ -127,6 +127,11 @@
       <form class="modal-content" id="reportForm">
         <div class="modal-heading"><div><span class="modal-kicker">TEAM UPDATE</span><h2>Share a progress report</h2><p>Let your team know what you've been working on.</p></div><button type="button" class="modal-close" data-close aria-label="Close">×</button></div>
         <label class="field-label" for="reportTask">Related task <span class="optional-label">Optional</span></label><select id="reportTask"><option value="">General team update</option></select>
+        <div class="report-completion-group hidden" id="reportCompletionGroup">
+          <label class="field-label" for="reportCompletion">Task completion <output id="reportCompletionValue" for="reportCompletion">0%</output></label>
+          <input id="reportCompletion" type="range" min="0" max="100" step="1" value="0" aria-describedby="reportCompletionHelp" />
+          <small id="reportCompletionHelp">Your report will keep the task In progress below 100%, and mark it Completed at 100%.</small>
+        </div>
         <label class="field-label" for="reportText">Your update</label><textarea id="reportText" rows="5" maxlength="5000" required placeholder="What did you accomplish? Any blockers or next steps?"></textarea>
         <label class="field-label" for="reportAttachment">Attach a file <span class="optional-label">Optional · Maximum 3 MB</span></label><input id="reportAttachment" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.csv,.doc,.docx,.xls,.xlsx,application/pdf,image/jpeg,image/png,image/webp,text/plain,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" /><p class="report-upload-status" id="reportUploadStatus" role="status" aria-live="polite"></p>
         <div class="modal-actions"><button type="button" class="button button-outline" data-close>Cancel</button><button type="submit" class="button button-primary">Post report <span>→</span></button></div>

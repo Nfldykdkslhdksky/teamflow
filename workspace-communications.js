@@ -86,15 +86,21 @@ export async function sendConversationMessage(supabase, conversationId, senderId
 
 export async function fetchEmployeeReports(supabase) {
   const { data, error } = await supabase.from("employee_reports")
-    .select("id, employee_id, task_title, body, attachment_path, attachment_name, attachment_type, attachment_size, status, review_note, reviewed_at, created_at")
+    .select("id, employee_id, task_id, task_title, body, completion_percentage, attachment_path, attachment_name, attachment_type, attachment_size, status, review_note, reviewed_at, created_at")
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data || [];
 }
 
-export async function submitEmployeeReport(supabase, { employeeId, taskTitle, body, file }) {
+export async function submitEmployeeReport(supabase, { employeeId, taskId, completionPercentage, body, file }) {
   const text = body.trim();
   if (!text || text.length > 5000) throw new Error("A report must be between 1 and 5,000 characters.");
+  if (taskId != null && (!Number.isInteger(completionPercentage) || completionPercentage < 0 || completionPercentage > 100)) {
+    throw new Error("Task completion must be between 0 and 100 percent.");
+  }
+  if (taskId == null && completionPercentage != null) {
+    throw new Error("Choose a task before submitting a completion percentage.");
+  }
 
   let attachment = {};
   let attachmentPath;
@@ -118,15 +124,15 @@ export async function submitEmployeeReport(supabase, { employeeId, taskTitle, bo
     };
   }
 
-  const { data, error } = await supabase.from("employee_reports")
-    .insert({
-      employee_id: employeeId,
-      task_title: taskTitle || "",
-      body: text,
-      ...attachment
-    })
-    .select("id, employee_id, task_title, body, attachment_path, attachment_name, attachment_type, attachment_size, status, review_note, reviewed_at, created_at")
-    .single();
+  const { data, error } = await supabase.rpc("submit_employee_report", {
+    p_task_id: taskId ?? null,
+    p_completion_percentage: completionPercentage ?? null,
+    p_body: text,
+    p_attachment_path: attachment.attachment_path ?? null,
+    p_attachment_name: attachment.attachment_name ?? null,
+    p_attachment_type: attachment.attachment_type ?? null,
+    p_attachment_size: attachment.attachment_size ?? null
+  });
   if (error) {
     if (attachmentPath) {
       const { error: cleanupError } = await supabase.storage.from(REPORT_ATTACHMENT_BUCKET).remove([attachmentPath]);
@@ -146,7 +152,7 @@ export async function reviewEmployeeReport(supabase, reportId, status, reviewNot
       reviewed_at: new Date().toISOString()
     })
     .eq("id", reportId)
-    .select("id, employee_id, task_title, body, attachment_path, attachment_name, attachment_type, attachment_size, status, review_note, reviewed_at, created_at")
+    .select("id, employee_id, task_id, task_title, body, completion_percentage, attachment_path, attachment_name, attachment_type, attachment_size, status, review_note, reviewed_at, created_at")
     .single();
   if (error) throw error;
   return data;
