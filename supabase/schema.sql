@@ -1,0 +1,304 @@
+create table if not exists public.profiles (
+  id uuid primary key references auth.users (id) on delete cascade,
+  email text not null unique,
+  full_name text not null,
+  role text not null default 'employee' check (role in ('admin', 'employee')),
+  skills text[] not null default '{}',
+  created_at timestamptz not null default now()
+);
+
+alter table public.profiles enable row level security;
+
+create or replace function public.is_workspace_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.profiles
+    where id = (select auth.uid())
+      and role = 'admin'
+  );
+$$;
+
+revoke all on function public.is_workspace_admin() from public;
+grant execute on function public.is_workspace_admin() to authenticated;
+
+drop policy if exists "Users can read their own profile" on public.profiles;
+create policy "Users can read their own profile"
+  on public.profiles for select to authenticated
+  using (id = (select auth.uid()));
+
+drop policy if exists "Admins can read all profiles" on public.profiles;
+create policy "Admins can read all profiles"
+  on public.profiles for select to authenticated
+  using ((select public.is_workspace_admin()));
+
+revoke all on public.profiles from anon, authenticated;
+grant select on public.profiles to authenticated;
+
+create or replace function public.create_employee_profile()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  insert into public.profiles (id, email, full_name, role, skills)
+  values (
+    new.id,
+    lower(new.email),
+    coalesce(nullif(trim(new.raw_user_meta_data ->> 'full_name'), ''), split_part(new.email, '@', 1)),
+    'employee',
+    coalesce(
+      array(select jsonb_array_elements_text(coalesce(new.raw_user_meta_data -> 'skills', '[]'::jsonb))),
+      '{}'::text[]
+    )
+  )
+  on conflict (id) do update
+    set email = excluded.email,
+        full_name = excluded.full_name,
+        skills = excluded.skills;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created_profile on auth.users;
+create trigger on_auth_user_created_profile
+  after insert on auth.users
+  for each row execute function public.create_employee_profile();
+
+insert into public.profiles (id, email, full_name, role, skills)
+select
+  users.id,
+  lower(users.email),
+  coalesce(nullif(trim(users.raw_user_meta_data ->> 'full_name'), ''), split_part(users.email, '@', 1)),
+  'employee',
+  coalesce(
+    array(select jsonb_array_elements_text(coalesce(users.raw_user_meta_data -> 'skills', '[]'::jsonb))),
+    '{}'::text[]
+  )
+from auth.users as users
+where users.email is not null
+on conflict (id) do update
+  set email = excluded.email,
+      full_name = excluded.full_name,
+      skills = excluded.skills;
+
+create or replace function public.workspace_directory()
+returns table (id uuid, full_name text, role text)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select profile.id, profile.full_name, profile.role
+  from public.profiles as profile
+  where (select auth.uid()) is not null
+  order by profile.full_name;
+$$;
+
+revoke all on function public.workspace_directory() from public;
+grant execute on function public.workspace_directory() to authenticated;
+
+create table if not exists public.chat_conversations (
+  id uuid primary key default gen_random_uuid(),
+  participant_one uuid not null references public.profiles (id) on delete cascade,
+  participant_two uuid not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chat_conversations_distinct_participants check (participant_one < participant_two),
+  constraint chat_conversations_unique_pair unique (participant_one, participant_two)
+);
+
+create table if not exists public.chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references public.chat_conversations (id) on delete cascade,
+  sender_id uuid not null references public.profiles (id) on delete cascade,
+  body text not null check (char_length(body) between 1 and 2000),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists chat_messages_conversation_created_idx
+  on public.chat_messages (conversation_id, created_at);
+
+alter table public.chat_conversations enable row level security;
+alter table public.chat_messages enable row level security;
+
+revoke all on public.chat_conversations, public.chat_messages from anon, authenticated;
+grant select, insert on public.chat_conversations to authenticated;
+grant select, insert on public.chat_messages to authenticated;
+
+drop policy if exists "Participants can read conversations" on public.chat_conversations;
+create policy "Participants can read conversations"
+  on public.chat_conversations for select to authenticated
+  using (auth.uid() in (participant_one, participant_two));
+
+drop policy if exists "Participants can create conversations" on public.chat_conversations;
+create policy "Participants can create conversations"
+  on public.chat_conversations for insert to authenticated
+  with check (
+    auth.uid() in (participant_one, participant_two)
+    and participant_one < participant_two
+  );
+
+drop policy if exists "Participants can read conversation messages" on public.chat_messages;
+create policy "Participants can read conversation messages"
+  on public.chat_messages for select to authenticated
+  using (
+    exists (
+      select 1
+      from public.chat_conversations as conversation
+      where conversation.id = conversation_id
+        and auth.uid() in (conversation.participant_one, conversation.participant_two)
+    )
+  );
+
+drop policy if exists "Participants can send conversation messages" on public.chat_messages;
+create policy "Participants can send conversation messages"
+  on public.chat_messages for insert to authenticated
+  with check (
+    sender_id = auth.uid()
+    and exists (
+      select 1
+      from public.chat_conversations as conversation
+      where conversation.id = conversation_id
+        and auth.uid() in (conversation.participant_one, conversation.participant_two)
+    )
+  );
+
+create or replace function public.touch_chat_conversation()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  update public.chat_conversations
+  set updated_at = now()
+  where id = new.conversation_id;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_chat_message_created on public.chat_messages;
+create trigger on_chat_message_created
+  after insert on public.chat_messages
+  for each row execute function public.touch_chat_conversation();
+
+create table if not exists public.employee_reports (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references public.profiles (id) on delete cascade,
+  task_title text not null default '',
+  body text not null check (char_length(body) between 1 and 5000),
+  attachment_path text,
+  attachment_name text,
+  attachment_type text,
+  attachment_size bigint check (attachment_size is null or attachment_size between 1 and 3145728),
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  review_note text,
+  reviewed_at timestamptz,
+  created_at timestamptz not null default now(),
+  constraint employee_reports_attachment_fields check (
+    (attachment_path is null and attachment_name is null and attachment_type is null and attachment_size is null)
+    or (attachment_path is not null and attachment_name is not null and attachment_type is not null and attachment_size is not null)
+  )
+);
+
+create index if not exists employee_reports_employee_created_idx
+  on public.employee_reports (employee_id, created_at desc);
+
+create index if not exists employee_reports_status_created_idx
+  on public.employee_reports (status, created_at desc);
+
+alter table public.employee_reports enable row level security;
+
+revoke all on public.employee_reports from anon, authenticated;
+grant select, insert, update on public.employee_reports to authenticated;
+
+drop policy if exists "Employees and admins can read reports" on public.employee_reports;
+create policy "Employees and admins can read reports"
+  on public.employee_reports for select to authenticated
+  using (employee_id = auth.uid() or (select public.is_workspace_admin()));
+
+drop policy if exists "Employees can submit their own reports" on public.employee_reports;
+create policy "Employees can submit their own reports"
+  on public.employee_reports for insert to authenticated
+  with check (
+    employee_id = auth.uid()
+    and status = 'pending'
+    and review_note is null
+    and reviewed_at is null
+    and (
+      attachment_path is null
+      or split_part(attachment_path, '/', 1) = auth.uid()::text
+    )
+  );
+
+drop policy if exists "Admins can review reports" on public.employee_reports;
+create policy "Admins can review reports"
+  on public.employee_reports for update to authenticated
+  using ((select public.is_workspace_admin()))
+  with check (
+    (select public.is_workspace_admin())
+    and status in ('pending', 'approved', 'rejected')
+  );
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'report-attachments',
+  'report-attachments',
+  false,
+  3145728,
+  array[
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'text/plain',
+    'text/csv',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  ]
+)
+on conflict (id) do update
+  set public = excluded.public,
+      file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Users can upload their report attachments" on storage.objects;
+create policy "Users can upload their report attachments"
+  on storage.objects for insert to authenticated
+  with check (
+    bucket_id = 'report-attachments'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+
+drop policy if exists "Employees and admins can read report attachments" on storage.objects;
+create policy "Employees and admins can read report attachments"
+  on storage.objects for select to authenticated
+  using (
+    bucket_id = 'report-attachments'
+    and (
+      (storage.foldername(name))[1] = (select auth.uid())::text
+      or (select public.is_workspace_admin())
+    )
+  );
+
+drop policy if exists "Users can remove their report attachments" on storage.objects;
+create policy "Users can remove their report attachments"
+  on storage.objects for delete to authenticated
+  using (
+    bucket_id = 'report-attachments'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+    and not exists (
+      select 1
+      from public.employee_reports as report
+      where report.attachment_path = name
+    )
+  );

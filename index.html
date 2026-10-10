@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f8fc" />
+    <title>TEAM FLOW — Team project workspace</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="messages.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body class="employee-page">
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <a class="brand" href="#" aria-label="TEAM FLOW home">
+          <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 28 28" fill="none"><path d="M14 3.5 24.5 9.3v9.4L14 24.5 3.5 18.7V9.3L14 3.5Z" stroke="currentColor" stroke-width="1.8"/><path d="m8.7 14 3.5 3.5 7.2-7.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span>TEAM FLOW</span>
+        </a>
+        <div class="workspace-label">WORKSPACE</div>
+        <button class="workspace-picker"><span class="workspace-icon">S</span><span class="workspace-name">Studio North</span><span class="chevron">⌄</span></button>
+        <nav class="nav-menu" aria-label="Main navigation">
+          <button class="nav-link active" data-view="dashboard"><span class="nav-icon">▦</span>Dashboard</button>
+          <button class="nav-link" data-view="tasks"><span class="nav-icon">☷</span>Tasks<span class="nav-count" id="taskNavCount">8</span></button>
+          <button class="nav-link" data-view="reports"><span class="nav-icon">▤</span>Reports</button>
+          <button class="nav-link" data-view="messages"><span class="nav-icon">▢</span>Chats</button>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="upgrade-card"><div class="upgrade-spark">✳</div><strong>Make teamwork<br />feel effortless.</strong><p>See how TEAM FLOW can help your team do its best work.</p><button id="exploreButton">Explore TEAM FLOW <span>↗</span></button></div>
+          <button class="nav-link settings-link" id="settingsButton"><span class="nav-icon">⚙</span>Settings</button>
+          <button class="profile-button"><span class="avatar avatar-me">EP</span><span class="profile-copy"><strong>Employee</strong><small>Team member</small></span><span class="profile-more">···</span></button>
+        </div>
+      </aside>
+
+      <main class="main-area">
+        <header class="topbar">
+          <button class="mobile-menu" id="mobileMenu" aria-label="Open menu">☰</button>
+          <div class="breadcrumb"><span>Studio North</span><span class="breadcrumb-slash">/</span><strong id="breadcrumbCurrent">My workspace</strong></div>
+          <div class="topbar-actions">
+            <label class="search-box"><span aria-hidden="true">⌕</span><input id="searchInput" type="search" placeholder="Search anything..." aria-label="Search tasks and team" /><kbd>⌘ K</kbd></label>
+            <button class="icon-button notification-button" id="notificationButton" aria-label="Notifications">♧<i></i></button>
+            <span class="avatar avatar-me top-avatar" id="topAvatar">JD</span>
+          </div>
+        </header>
+
+        <div class="page-content">
+          <div id="employeeDashboardView">
+          <section class="page-heading">
+            <div><div class="eyebrow" id="todayDate">TUESDAY, MAY 21, 2024</div><h1 id="pageTitle">My workspace</h1><p class="heading-subtitle" id="pageSubtitle">Here are the tasks assigned to you.</p></div>
+            <div class="heading-actions"><button class="button button-outline" id="messageButton">✉ Send a message</button><button class="button button-primary" id="reportButton"><span>＋</span> Submit a report</button></div>
+          </section>
+
+          <section class="stats-grid employee-stats-grid" aria-label="My task overview">
+            <article class="stat-card interactive-stat-card" data-task-filter="active" role="button" tabindex="0" aria-label="Show active tasks"><div class="stat-top"><span>Active tasks</span><span class="stat-icon icon-violet">☷</span></div><div class="stat-value" id="activeTasks">0</div><div class="stat-foot"><span>View active tasks</span></div></article>
+            <article class="stat-card interactive-stat-card" data-task-filter="completed" role="button" tabindex="0" aria-label="Show completed tasks"><div class="stat-top"><span>Completed tasks</span><span class="stat-icon icon-green">✓</span></div><div class="stat-value" id="completedTasks">0</div><div class="stat-foot"><span>View completed tasks</span></div></article>
+            <article class="stat-card interactive-stat-card" data-task-filter="due-week" role="button" tabindex="0" aria-label="Show tasks due this week"><div class="stat-top"><span>Due this week</span><span class="stat-icon icon-amber">◷</span></div><div class="stat-value" id="dueTasks">0</div><div class="stat-foot"><span>View next 7 days</span></div></article>
+          </section>
+          <section class="panel employee-dashboard-reports"><div class="panel-heading"><div><h2>Report reviews</h2><p>See the latest status of your submitted reports.</p></div></div><div class="employee-report-list" id="employeeDashboardReportList"></div><div class="admin-message-empty hidden" id="employeeDashboardReportsEmpty">You haven't submitted a report yet.</div></section>
+          </div>
+
+          <div id="employeeTasksView" class="hidden">
+          <section class="page-heading"><div><div class="eyebrow">YOUR WORK</div><h1>My tasks</h1><p class="heading-subtitle">Update the status of your assigned work and share progress.</p></div></section>
+          <section class="primary-grid">
+            <article class="panel tasks-panel">
+              <div class="panel-heading"><div><div class="panel-title-line"><h2 id="taskPanelTitle">My assigned tasks</h2><span class="live-indicator"></span><span class="updated-text">Updated just now</span></div><p>Update the status of your assigned work and share progress.</p></div></div>
+              <div class="task-filters"><button class="filter-button selected" data-filter="all">All tasks <span id="allTaskCount">0</span></button><button class="filter-button" data-filter="active">Active</button><button class="filter-button" data-filter="due-week">Due this week</button><button class="filter-button" data-filter="in progress">In progress</button><button class="filter-button" data-filter="to do">To do</button><button class="filter-button" data-filter="review">In review</button><button class="filter-button" data-filter="completed">Completed</button></div>
+              <div class="task-table-wrap"><table class="task-table"><thead><tr><th>TASK</th><th>ASSIGNEE</th><th>PRIORITY</th><th>DUE DATE</th><th>STATUS</th><th></th></tr></thead><tbody id="taskRows"></tbody></table></div>
+              <div class="empty-state hidden" id="emptyTasks">You don't have any assigned tasks yet. Your admin will assign work that matches your skills.</div>
+              <div class="table-footer"><span id="taskCountLabel">Showing 6 of 24 tasks</span><div class="pagination"><button aria-label="Previous page" disabled>‹</button><button class="current-page">1</button><button>2</button><button>3</button><button aria-label="Next page">›</button></div></div>
+            </article>
+
+            <div class="right-column">
+              <article class="panel workload-panel">
+                <div class="panel-heading compact-heading"><div><h2>Team workload</h2><p>Capacity across your team</p></div>                <button class="more-button workload-more-button" id="workloadMoreButton" type="button" aria-expanded="false">See all members</button></div>
+                <div class="workload-list" id="workloadList"></div>
+              </article>
+              <article class="panel activity-panel">
+                <div class="panel-heading compact-heading"><div><h2>Recent activity</h2><p>Latest updates from your team</p></div><button class="more-button activity-more-button" id="activityMoreButton" type="button" aria-expanded="false">See all</button></div>
+                <div class="activity-list" id="activityList"></div>
+                <button class="text-button activity-link" data-view="reports">See all activity <span>→</span></button>
+              </article>
+            </div>
+          </section>
+          </div>
+          <section class="messages-view hidden" id="employeeMessagesView">
+            <section class="page-heading"><div><div class="eyebrow">TEAM COMMUNICATION</div><h1>Chats</h1><p class="heading-subtitle">Start a private conversation with a teammate or administrator.</p></div></section>
+            <section class="panel admin-messages-panel">
+              <div class="chat-layout">
+                <aside class="chat-sidebar">
+                  <div class="chat-start"><label class="field-label" for="employeeChatPartner">Start a chat</label><div class="chat-start-controls"><select id="employeeChatPartner" required></select><button class="button button-primary" id="employeeStartChat" type="button">Open</button></div></div>
+                  <div class="chat-conversation-list" id="employeeConversationList"></div>
+                </aside>
+                <section class="chat-thread">
+                  <div class="chat-thread-heading"><h2 id="employeeChatTitle">Select a conversation</h2><span id="employeeChatStatus"></span></div>
+                  <div class="chat-thread-messages" id="employeeChatMessages"><div class="admin-message-empty">Choose a teammate to open a chat.</div></div>
+                  <form class="chat-reply-form" id="employeeChatForm"><textarea id="employeeChatInput" rows="2" maxlength="2000" required disabled placeholder="Select a conversation to reply..."></textarea><button class="button button-primary" type="submit" disabled>Send</button></form>
+                </section>
+              </div>
+            </section>
+          </section>
+          <section class="messages-view hidden" id="employeeReportsView">
+            <section class="page-heading"><div><div class="eyebrow">REPORT HISTORY</div><h1>My reports</h1><p class="heading-subtitle">Follow each report through review.</p></div><button class="button button-primary" id="employeeNewReportButton">＋ Submit a report</button></section>
+            <section class="panel employee-dashboard-reports"><div class="employee-report-list" id="employeeReportsList"></div><div class="admin-message-empty hidden" id="employeeReportsEmpty">You haven't submitted a report yet.</div></section>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <dialog class="modal" id="reportModal">
+      <form class="modal-content" id="reportForm">
+        <div class="modal-heading"><div><span class="modal-kicker">TEAM UPDATE</span><h2>Share a progress report</h2><p>Let your team know what you've been working on.</p></div><button type="button" class="modal-close" data-close aria-label="Close">×</button></div>
+        <label class="field-label" for="reportTask">Related task <span class="optional-label">Optional</span></label><select id="reportTask"><option value="">General team update</option></select>
+        <label class="field-label" for="reportText">Your update</label><textarea id="reportText" rows="5" maxlength="5000" required placeholder="What did you accomplish? Any blockers or next steps?"></textarea>
+        <label class="field-label" for="reportAttachment">Attach a file <span class="optional-label">Optional · Maximum 3 MB</span></label><input id="reportAttachment" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.csv,.doc,.docx,.xls,.xlsx,application/pdf,image/jpeg,image/png,image/webp,text/plain,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" /><p class="report-upload-status" id="reportUploadStatus" role="status" aria-live="polite"></p>
+        <div class="modal-actions"><button type="button" class="button button-outline" data-close>Cancel</button><button type="submit" class="button button-primary">Post report <span>→</span></button></div>
+      </form>
+    </dialog>
+  </body>
+</html>

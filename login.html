@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f8fc" />
+    <title>Sign in — TEAM FLOW</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="login.css" />
+    <script type="module" src="login.js"></script>
+  </head>
+  <body class="login-page">
+    <main class="login-layout">
+      <section class="login-brand-panel">
+        <a class="brand login-brand" href="login.html" aria-label="TEAM FLOW home">
+          <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 28 28" fill="none"><path d="M14 3.5 24.5 9.3v9.4L14 24.5 3.5 18.7V9.3L14 3.5Z" stroke="currentColor" stroke-width="1.8"/><path d="m8.7 14 3.5 3.5 7.2-7.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>TEAM FLOW</span>
+        </a>
+        <div class="login-promo">
+          <span class="login-promo-mark">✳</span>
+          <h1>Good work<br />moves together.</h1>
+          <p>One calm place to organize your work, share progress, and help your team do its best.</p>
+          <div class="login-promo-foot"><span class="promo-avatars"><i>MC</i><i>AR</i><i>SP</i><i>+</i></span><span>Made for teams that make things.</span></div>
+        </div>
+      </section>
+      <section class="login-form-panel">
+        <div class="login-form-wrap">
+          <span class="login-eyebrow">WELCOME TO TEAM FLOW</span>
+          <h2>Sign in to your workspace</h2>
+          <p class="login-intro">Sign in with the email and password supplied by your administrator.</p>
+          <form id="loginForm" novalidate>
+            <label class="field-label" for="loginEmail">Email address</label>
+            <input id="loginEmail" name="email" type="email" autocomplete="username" placeholder="you@company.com" required />
+            <label class="field-label" for="loginPassword">Password</label>
+            <div class="password-field"><input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required /><button type="button" id="togglePassword" aria-label="Show password">Show</button></div>
+            <p class="login-error" id="loginError" role="alert" aria-live="polite"></p>
+            <button class="button button-primary login-submit" type="submit">Sign in <span>→</span></button>
+          </form>
+          <p class="login-security-note" id="connectionStatus">Connecting to secure sign-in…</p>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
