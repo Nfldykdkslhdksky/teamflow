@@ -11,10 +11,12 @@ import {
 } from "./workspace-communications.js";
 import { skillMatchScore } from "./skill-matching.js";
 import {
+  fetchWorkspaceProjects,
   fetchWorkspaceTasks,
   importLegacyWorkspaceTasks,
   insertWorkspaceTask,
   deleteWorkspaceTasks,
+  upsertWorkspaceProject,
   updateWorkspaceTask,
   workspaceTaskFromRow
 } from "./workspace-tasks.js";
@@ -101,6 +103,7 @@ import {
   let activities = Array.isArray(saved.activities) ? saved.activities : [];
   let activeView = "tasks";
   let workspaceDirectory = [];
+  let workspaceProjects = new Map();
   let conversations = [];
   let selectedConversationId = null;
   let reports = [];
@@ -130,6 +133,22 @@ import {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toast.classList.remove("show"), 2800);
   }
+  function setWorkspaceProject(project) {
+    workspaceProjects.set(project.project, project.description);
+    const options = $("#adminProjectOptions");
+    if (![...options.options].some((option) => option.value === project.project)) {
+      const option = document.createElement("option");
+      option.value = project.project;
+      options.append(option);
+    }
+  }
+  async function refreshWorkspaceProjects() {
+    const projects = await fetchWorkspaceProjects(supabase);
+    workspaceProjects = new Map();
+    $("#adminProjectOptions").replaceChildren();
+    projects.forEach(setWorkspaceProject);
+    if (activeView === "tasks") render();
+  }
   if (assignmentsNeedCleanup) persist();
   function shortDate(value) {
     if (!value) return "No date";
@@ -156,6 +175,7 @@ import {
     const projectCards = [...projects].map(([project, projectTasks], index) => {
       const projectId = `project-${index}`;
       const isExpanded = expandedProjects.has(project);
+      const projectDescription = workspaceProjects.get(project) || "";
       const taskRows = projectTasks.map((task) => {
         const options = `<option value="">Unassigned</option>${team.map((member) => `<option value="${escapeHTML(member.name)}" ${task.assignee === member.name ? "selected" : ""}>${escapeHTML(member.name)}</option>`).join("")}`;
         const progress = task.completionPercentage > 0 ? `<small class="task-completion">${escapeHTML(task.completionPercentage)}% complete</small>` : "";
@@ -175,6 +195,7 @@ import {
           </button>
           <button type="button" class="admin-delete-button admin-delete-project" data-delete-project="${escapeHTML(project)}" aria-label="Delete project ${escapeHTML(project)} and all its tasks">Delete project</button>
         </div>
+        ${projectDescription ? `<p class="admin-project-description">${escapeHTML(projectDescription)}</p>` : ""}
         <div class="admin-project-details${isExpanded ? "" : " hidden"}" id="${projectId}-details">
           <div class="task-table-wrap"><table class="task-table admin-task-table"><thead><tr><th>TASK</th><th>SKILL</th><th>PRIORITY</th><th>DUE DATE</th><th>STATUS</th><th>ASSIGN / DELETE</th></tr></thead><tbody>${taskRows}</tbody></table></div>
         </div>
@@ -621,7 +642,14 @@ import {
       importing = false;
     }
   });
-  $("#newTaskButton").addEventListener("click", () => $("#adminTaskModal").showModal());
+  $("#newTaskButton").addEventListener("click", () => {
+    const project = $("#adminTaskProject").value.trim();
+    $("#adminProjectDescription").value = workspaceProjects.get(project) || "";
+    $("#adminTaskModal").showModal();
+  });
+  $("#adminTaskProject").addEventListener("change", () => {
+    $("#adminProjectDescription").value = workspaceProjects.get($("#adminTaskProject").value.trim()) || "";
+  });
   document.querySelectorAll("[data-account-menu-toggle]").forEach((toggle) => toggle.addEventListener("click", (event) => {
     event.stopPropagation();
     const menu = toggle.closest(".account-control").querySelector("[data-account-menu]");
@@ -691,11 +719,14 @@ import {
       title, project: $("#adminTaskProject").value.trim(), skill: $("#adminTaskSkill").value,
       assignee, priority: $("#adminTaskPriority").value, due: due || "", status: "To do"
     };
+    const projectDescription = $("#adminProjectDescription").value.trim();
     const assignedMember = team.find((member) => member.name === assignee);
     activities.unshift({ name: assignedMember?.name || adminSession.name, initials: assignedMember?.initials || adminSession.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2), color: assignedMember?.color || "avatar-me", text: assignee ? `was assigned <strong>${escapeHTML(title)}</strong> by ${escapeHTML(adminSession.name)}` : `created <strong>${escapeHTML(title)}</strong>`, time: "just now" });
     const submitButton = $("#adminTaskForm button[type='submit']");
     submitButton.disabled = true;
     try {
+      const savedProject = await upsertWorkspaceProject(supabase, task.project, projectDescription);
+      setWorkspaceProject(savedProject);
       const row = await insertWorkspaceTask(supabase, task, team);
       tasks.unshift(workspaceTaskFromRow(row, team));
       persist();
@@ -765,6 +796,11 @@ import {
     if (checkbox) checkbox.checked = true;
   });
   try {
+    await refreshWorkspaceProjects();
+  } catch (error) {
+    showToast(`Couldn't load project descriptions: ${error.message}`);
+  }
+  try {
     let rows = await fetchWorkspaceTasks(supabase);
     if (!rows.length) {
       rows = await importLegacyWorkspaceTasks(supabase, tasks, team);
@@ -793,6 +829,11 @@ import {
     showToast(`Couldn't load chats: ${error.message}`);
   }
   window.setInterval(async () => {
+    try {
+      await refreshWorkspaceProjects();
+    } catch (error) {
+      showToast(`Couldn't refresh project descriptions: ${error.message}`);
+    }
     try {
       const rows = await fetchWorkspaceTasks(supabase);
       tasks = rows.map((row) => workspaceTaskFromRow(row, team));

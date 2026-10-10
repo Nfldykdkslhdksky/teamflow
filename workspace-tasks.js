@@ -7,6 +7,25 @@ export async function fetchWorkspaceTasks(supabase) {
   return data || [];
 }
 
+export async function fetchWorkspaceProjects(supabase) {
+  const { data, error } = await supabase
+    .from("workspace_projects")
+    .select("project, description")
+    .order("project");
+  if (error) throw error;
+  return data || [];
+}
+
+export async function upsertWorkspaceProject(supabase, project, description) {
+  const { data, error } = await supabase
+    .from("workspace_projects")
+    .upsert({ project, description }, { onConflict: "project" })
+    .select("project, description")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 export function workspaceTaskFromRow(row, team) {
   return {
     id: Number(row.id),

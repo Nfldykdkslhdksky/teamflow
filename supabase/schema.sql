@@ -167,6 +167,37 @@ create policy "Admins can delete workspace tasks"
   on public.workspace_tasks for delete to authenticated
   using ((select public.is_workspace_admin()));
 
+create table if not exists public.workspace_projects (
+  project text primary key check (char_length(btrim(project)) between 1 and 60),
+  description text not null default '' check (char_length(description) <= 1000)
+);
+
+alter table public.workspace_projects enable row level security;
+revoke all on public.workspace_projects from anon, authenticated;
+grant select, insert, update on public.workspace_projects to authenticated;
+
+drop policy if exists "Workspace members can read project descriptions" on public.workspace_projects;
+create policy "Workspace members can read project descriptions"
+  on public.workspace_projects for select to authenticated
+  using ((select auth.uid()) is not null);
+
+drop policy if exists "Admins can create workspace projects" on public.workspace_projects;
+create policy "Admins can create workspace projects"
+  on public.workspace_projects for insert to authenticated
+  with check ((select public.is_workspace_admin()));
+
+drop policy if exists "Admins can update workspace projects" on public.workspace_projects;
+create policy "Admins can update workspace projects"
+  on public.workspace_projects for update to authenticated
+  using ((select public.is_workspace_admin()))
+  with check ((select public.is_workspace_admin()));
+
+insert into public.workspace_projects (project)
+select distinct project
+from public.workspace_tasks
+where btrim(project) <> ''
+on conflict (project) do nothing;
+
 create or replace function public.update_workspace_task_status(task_id bigint, new_status text)
 returns void
 language plpgsql

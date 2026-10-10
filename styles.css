@@ -42,6 +42,8 @@
 .admin-project-card.expanded{border-color:#c7dff4}
 .admin-project-heading{display:flex;align-items:center;gap:8px;padding-right:12px}
 .admin-project-heading .admin-project-toggle{width:auto;flex:1;min-width:0}
+.admin-project-description{margin:0;padding:0 16px 12px 57px;color:#758197;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+.task-project-description{margin-top:3px;color:#758197;font-size:9px;line-height:1.4;overflow-wrap:anywhere}
 .admin-delete-button{flex:0 0 auto;border:1px solid #f0d5d6;border-radius:6px;background:#fff;color:#ad4a50;padding:6px 9px;font-size:9px;font-weight:600;transition:background .15s ease,border-color .15s ease}
 .admin-delete-button:hover,.admin-delete-button:focus-visible{border-color:#df9c9f;background:#fff3f3;outline:2px solid #f1c6c8;outline-offset:1px}
 .admin-delete-button:disabled{opacity:.55;cursor:wait}

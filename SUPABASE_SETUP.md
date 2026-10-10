@@ -52,6 +52,7 @@ Imports support up to 100 rows and report results per account. Employees sign in
 - The employee dashboard's **Team workload** percentage is the average of each member's latest submitted completion percentage for their reported tasks. It shows **0%** when a member has not submitted task progress; it does not estimate workload from capacity or assigned task count.
 - Admins use **Report reviews** to approve a report or request changes and leave an optional review note. Employees see pending, approved, or rejected status and any review note on their dashboard and report history.
 - Task assignments and employee task-status changes are stored in Supabase and shared across devices. The first admin sign-in after adding this schema imports the tasks from that admin browser's existing local workspace when the shared task table is empty.
+- Project descriptions are shared across devices and shown to employees on their assigned tasks. Admins can add or update a description when creating a task in a project; project names already in the task table are backfilled with a blank description.
 - If these features were already loaded in a browser before the schema update, run the updated schema script in the Supabase SQL Editor, then reload the site and sign in again. Existing browser-only messages/reports are not automatically imported into the new database.
 
 ## Important security boundary

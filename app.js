@@ -12,6 +12,7 @@ import {
 } from "./workspace-communications.js";
 import {
   fetchWorkspaceTasks,
+  fetchWorkspaceProjects,
   updateWorkspaceTaskStatus,
   workspaceTaskFromRow
 } from "./workspace-tasks.js";
@@ -60,6 +61,7 @@ let activities = Array.isArray(savedState.activities) ? savedState.activities : 
 let activeFilter = "all";
 let activeView = "dashboard";
 let workspaceDirectory = [];
+let workspaceProjects = new Map();
 let workloadPercentages = new Map();
 let conversations = [];
 let selectedConversationId = null;
@@ -80,6 +82,11 @@ function memberFor(name) { return team.find((member) => member.name === name); }
 async function refreshEmployeeTasks() {
   const rows = await fetchWorkspaceTasks(supabase);
   tasks = rows.map((row) => workspaceTaskFromRow(row, team));
+  renderAll();
+}
+async function refreshWorkspaceProjectDescriptions() {
+  const projects = await fetchWorkspaceProjects(supabase);
+  workspaceProjects = new Map(projects.map((project) => [project.project, project.description]));
   renderAll();
 }
 function shortDate(value) {
@@ -113,8 +120,9 @@ function renderTasks() {
     const member = memberFor(task.assignee);
     const statusClass = task.status.toLowerCase().replaceAll(" ", "-");
     const progress = task.completionPercentage > 0 ? `<small class="task-completion">${escapeHTML(task.completionPercentage)}% complete</small>` : "";
+    const projectDescription = workspaceProjects.get(task.project) || "";
     return `<tr>
-      <td><div class="task-name"><span class="task-checkbox ${task.status === "Completed" ? "done" : ""}">${task.status === "Completed" ? "✓" : ""}</span><span>${escapeHTML(task.title)}</span></div><div class="task-project">${escapeHTML(task.project)}</div></td>
+      <td><div class="task-name"><span class="task-checkbox ${task.status === "Completed" ? "done" : ""}">${task.status === "Completed" ? "✓" : ""}</span><span>${escapeHTML(task.title)}</span></div><div class="task-project">${escapeHTML(task.project)}</div>${projectDescription ? `<div class="task-project-description">${escapeHTML(projectDescription)}</div>` : ""}</td>
       <td>${member ? `<div class="assignee-cell"><span class="avatar avatar-small ${escapeHTML(member.color)}">${escapeHTML(member.initials)}</span><span class="assignee-name">${escapeHTML(member.name.split(" ")[0])}</span></div>` : `<span class="assignee-name unassigned-name">Unassigned</span>`}</td>
       <td><span class="priority priority-${task.priority.toLowerCase()}">${escapeHTML(task.priority)}</span></td>
       <td><span class="due-cell">${escapeHTML(shortDate(task.due))}</span></td>
@@ -134,14 +142,15 @@ function renderTasks() {
   $("#dueTasks").textContent = dueThisWeek;
 }
 function renderWorkload() {
-  const displayedMembers = showAllWorkload ? team : team.slice(0, 4);
+  const employeeTeam = team.filter((member) => member.role === "Employee");
+  const displayedMembers = showAllWorkload ? employeeTeam : employeeTeam.slice(0, 4);
   $("#workloadList").innerHTML = displayedMembers.map((member) => {
     const memberTasks = tasks.filter((task) => task.assignee === member.name);
     const assigned = memberTasks.filter((task) => task.status !== "Completed").length;
     const load = workloadPercentages.get(String(member.id)) ?? 0;
     const isExpanded = expandedWorkloadMember === member.id;
     const taskDetails = memberTasks.length
-      ? memberTasks.map((task) => `<li><span>${escapeHTML(task.title)}</span><small>${escapeHTML(task.status)}</small></li>`).join("")
+      ? memberTasks.map((task) => `<li><span>${escapeHTML(task.title)}</span><small>${escapeHTML(task.status)} · ${escapeHTML(task.completionPercentage ?? 0)}% complete</small></li>`).join("")
       : "<li><span>No assigned tasks</span></li>";
     return `<div class="workload-member-wrap${isExpanded ? " expanded" : ""}">
       <button class="member-workload" type="button" data-workload-member="${escapeHTML(member.id)}" aria-expanded="${isExpanded}">
@@ -152,9 +161,9 @@ function renderWorkload() {
       <ul class="workload-task-details${isExpanded ? "" : " hidden"}">${taskDetails}</ul>
     </div>`;
   }).join("");
-  $("#workloadMoreButton").textContent = showAllWorkload || team.length <= 4 ? "Team workload" : `See all ${team.length} members`;
+  $("#workloadMoreButton").textContent = showAllWorkload || employeeTeam.length <= 4 ? "Team workload" : `See all ${employeeTeam.length} members`;
   $("#workloadMoreButton").setAttribute("aria-expanded", String(showAllWorkload));
-  $("#workloadMoreButton").disabled = team.length <= 4;
+  $("#workloadMoreButton").disabled = employeeTeam.length <= 4;
 }
 function renderActivity() {
   const entries = showAllActivity ? activities : activities.slice(0, 4);
@@ -516,6 +525,12 @@ try {
   showToast(`Couldn't load workspace members: ${error.message}`);
 }
 try {
+  await refreshWorkspaceProjectDescriptions();
+} catch (error) {
+  showToast(`Couldn't load project descriptions: ${error.message}`);
+}
+renderAll();
+try {
   await refreshTeamWorkload();
 } catch (error) {
   showToast(`Couldn't load team workload: ${error.message}`);
@@ -536,6 +551,11 @@ try {
   showToast(`Couldn't load chats: ${error.message}`);
 }
 window.setInterval(async () => {
+  try {
+    await refreshWorkspaceProjectDescriptions();
+  } catch (error) {
+    showToast(`Couldn't refresh project descriptions: ${error.message}`);
+  }
   try {
     await refreshEmployeeTasks();
   } catch (error) {
